@@ -123,12 +123,14 @@ def main():
 
     long_option = parser.add_argument_group("Long reads options")
     long_option.add_argument('-x', '--depth', default=100, type=int, help="default is 100")
+    long_option.add_argument('--min-len', default=1000, type=int, help="default is 1000")
+    long_option.add_argument('--min-qual', default=7, type=int, help="default is 7")
     args = parser.parse_args()
 
     polca_dirname = os.path.join(args.output_dir, 'polish', 'polca')
     polypolish_dirname = os.path.join(args.output_dir, 'polish', 'polypolish')
     unicycler_assembly = os.path.join(args.output_dir, 'assembly.fasta')
-    polca_assembly = os.path.join(polca_dirname, 'assembly.fasta.PolcaCorrected.fa')
+    polca_assembly = os.path.join(polca_dirname, 'polypolish.fasta.PolcaCorrected.fa')
     polypolish_assembly = os.path.join(polypolish_dirname, 'polypolish.fasta')
     logfile = os.path.join(args.output_dir, 'autocycler.log')
     for dirname in (polca_dirname, polypolish_dirname):
@@ -184,7 +186,7 @@ def main():
         long_reads = args.long_reads
 
     filtered_long_reads = os.path.join(args.output_dir, 'READS.fit.fq')
-    long_read_filter(long_reads, filtered_long_reads)
+    long_read_filter(long_reads, filtered_long_reads, min_qual=qrgs.min_qual, min_len=args.min_len)
     long_reads = filtered_long_reads
     logger.info("Running unicycler")
     run(f"unicycler -1 {args.short_reads_1} -2 {args.short_reads_2} -l {long_reads} "
