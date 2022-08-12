@@ -26,15 +26,18 @@ FMT = "%(asctime)-20s[%(levelname)s] %(message)s"
 DATEFMT = "%Y-%m-%d %H:%M:%S"
 
 
-def run(cmd):
-    child_process = subprocess.run(cmd, shell=True, check=True, stdout=subprocess.PIPE, universal_newlines=True)
-    return child_process
+def run(cmd, catch_output=False):
+    if catch_output:
+        child_process = subprocess.run(cmd, shell=True, check=True, stdout=subprocess.PIPE, universal_newlines=True)
+        return child_process
+    else:
+        subprocess.run(cmd, shell=True, check=True)
 
 
 def check_dependency():
     logger = logging.getLogger(__name__)
     for program_name, cmd in VERSION.items():
-        child_process = run(cmd)
+        child_process = run(cmd, catch_output=True)
         if child_process.returncode:
             logger.error(msg=f"Could not determine version of {program_name}")
             sys.exit(0)
@@ -167,7 +170,7 @@ def main():
     shot_depth = int(total_bases / genome_size)
     logger.info(f"Estimated short sequencing depth: {shot_depth}x.")
     
-    output = subprocess.getoutput(f"nanoq -s -i {args.long_reads}")
+    output = subprocess.getoutput(f"nanoq -f -s -i {args.long_reads}")
     total_bases = int(output.split()[1])
     long_depth = int(total_bases / genome_size)
     logger.info(f"Estimated long sequencing depth: {long_depth}x.")
@@ -187,26 +190,26 @@ def main():
     run(f"unicycler -1 {args.short_reads_1} -2 {args.short_reads_2} -l {long_reads} "
         f"-o {args.output_dir} -t {args.num_threads} --spades_tmp_dir /tmp --no_correct --no_pilon")
 
-    run_polca(                    
-        unicycler_assembly,   # POLCA is a polishing tool in MaSuRCA (Maryland Super Read Cabog Assembler)
+    alignments_1, alignments_2 = read_alignments(
+        unicycler_assembly, args.short_reads_1, args.short_reads_2, polypolish_dirname, args.num_threads
+    )
+
+    logger.info("Running polypolish")
+    run_polypolish(
+        unicycler_assembly,
+        alignments_1,
+        alignments_2,
+        polypolish_dirname,
+    )
+    run_polca(
+        polypolish_assembly,   # POLCA is a polishing tool in MaSuRCA (Maryland Super Read Cabog Assembler)
         args.short_reads_1,   # https://github.com/alekseyzimin/masurca#polca
         args.short_reads_2,
         polca_dirname,
         args.num_threads,
     )
-    alignments_1, alignments_2 = read_alignments(
-        polca_assembly, args.short_reads_1, args.short_reads_2, polypolish_dirname, args.num_threads
-    )
-
-    logger.info("Running polypolish")
-    run_polypolish(
-        polca_assembly,
-        alignments_1,
-        alignments_2,
-        polypolish_dirname,
-    )
     final_assembly = os.path.join(args.output_dir, 'contigs.fasta')
-    shutil.copyfile(polypolish_assembly, final_assembly)
+    shutil.copyfile(polca_assembly, final_assembly)
     logger.info(f'Saving {final_assembly}')
 
     for filename in ('READS.sub.fq', 'READS.fit.fq', 'assembly.fasta.fai', 'polish'):
