@@ -68,6 +68,10 @@ def parse_genome_size(pattern):
 
 
 def run_polca(assembly, short_reads_1, short_reads_2, output_dir, num_threads):
+    """
+    POLCA is a polishing tool in MaSuRCA (Maryland Super Read Cabog Assembler)
+    https://github.com/alekseyzimin/masurca#polca
+    """
     logger = logging.getLogger(__name__)
     logger.info("Running polca")
     
@@ -103,15 +107,6 @@ def read_alignments(assembly, short_reads_1, short_reads_2, output_dir, num_thre
     return alignments_1, alignments_2
 
 
-def long_read_filter(input_file, output_file, min_qual=7, min_len=1000):
-    logger = logging.getLogger(__name__)
-    logfile = logger.handlers[0].baseFilename
-    logger.info(f'Filter out long reads length less than {min_len}bp and average quality score less than {min_qual}')
-    run(
-        f"nanoq -s -vv --min-len {min_len} --min-qual {min_qual} --input {input_file} --output {output_file} 2>&1 | tee -a {logfile}"
-    )
-
-
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-1', '--short-reads-1', required=True)
@@ -123,8 +118,6 @@ def main():
 
     long_option = parser.add_argument_group("Long reads options")
     long_option.add_argument('-x', '--depth', default=100, type=int, help="default is 100")
-    long_option.add_argument('--min-len', default=1000, type=int, help="default is 1000")
-    long_option.add_argument('--min-qual', default=7, type=int, help="default is 7")
     args = parser.parse_args()
 
     polca_dirname = os.path.join(args.output_dir, 'polish', 'polca')
@@ -167,7 +160,7 @@ def main():
         genome_size = estimate_genome_size(args.short_reads_1, args.num_threads)
         logger.info(f"Estimated genome size was {genome_size}bp.")
 
-    output = subprocess.getoutput(f"zcat -f {args.short_reads_1} {args.short_reads_2} | nanoq -s")
+    output = subprocess.getoutput(f"zcat -f {args.short_reads_1} {args.short_reads_2} | nanoq -f -s")
     total_bases = int(output.split()[1])
     shot_depth = int(total_bases / genome_size)
     logger.info(f"Estimated short sequencing depth: {shot_depth}x.")
@@ -185,9 +178,6 @@ def main():
     else:
         long_reads = args.long_reads
 
-    filtered_long_reads = os.path.join(args.output_dir, 'READS.fit.fq')
-    long_read_filter(long_reads, filtered_long_reads, min_qual=qrgs.min_qual, min_len=args.min_len)
-    long_reads = filtered_long_reads
     logger.info("Running unicycler")
     run(f"unicycler -1 {args.short_reads_1} -2 {args.short_reads_2} -l {long_reads} "
         f"-o {args.output_dir} -t {args.num_threads} --spades_tmp_dir /tmp --no_correct --no_pilon")
@@ -204,8 +194,8 @@ def main():
         polypolish_dirname,
     )
     run_polca(
-        polypolish_assembly,   # POLCA is a polishing tool in MaSuRCA (Maryland Super Read Cabog Assembler)
-        args.short_reads_1,   # https://github.com/alekseyzimin/masurca#polca
+        polypolish_assembly,
+        args.short_reads_1,
         args.short_reads_2,
         polca_dirname,
         args.num_threads,
